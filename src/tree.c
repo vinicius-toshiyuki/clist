@@ -8,7 +8,9 @@ struct tree_controller T = {
     tree_del_node,
     tree_add,
     tree_join,
-    {tree_run_depth_pre, tree_run_depth_pos, tree_run_breadth}};
+    {tree_run_inorder, tree_run_postorder, tree_run_breadth},
+    NULL,
+    0};
 
 node_t tree_new_node(void *val) {
   node_t node = alloc(struct node);
@@ -21,7 +23,7 @@ node_t tree_new_node(void *val) {
 void tree_del_node(node_t node) {
   if (node->top) {
     size_t pos = 0;
-    list_map(if (node == Lval) break; pos++, node->top->branches);
+    list_map(if (node == L.val) break; pos++, node->top->branches);
     L.pop(pos, node->top->branches);
     if (node->top->branches->size == 0) {
       L.del(node->top->branches);
@@ -33,7 +35,7 @@ void tree_del_node(node_t node) {
 
 void tree_del_sub_tree(node_t node) {
   if (node->branches) {
-    list_map(tree_del_sub_tree(Lval), node->branches);
+    list_map(tree_del_sub_tree(L.val), node->branches);
     L.del(node->branches);
   }
   free(node);
@@ -52,24 +54,23 @@ void tree_join(node_t branch, node_t tree) {
   branch->top = tree;
 }
 
-void tree_run_depth(void (*action)(node_t, void *), void *data, int mode,
-                    node_t node) {
-  if (mode == TREE_RUN_PRE)
+void tree_run_order(void (*action)(node_t, void *), void *data,
+                    enum tree_run_order mode, node_t node) {
+  if (mode == TREE_RUN_INORDER)
     action(node, data);
   if (node->branches)
-    list_map(tree_run_depth(action, data, mode, Lval), node->branches);
-  if (mode == TREE_RUN_POS)
+    list_map(tree_run_order(action, data, mode, L.val), node->branches);
+  if (mode == TREE_RUN_POSTORDER)
     action(node, data);
 }
 
-void tree_run_depth_pre(void (*action)(node_t, void *), void *data,
-                        node_t node) {
-  tree_run_depth(action, data, TREE_RUN_PRE, node);
+void tree_run_inorder(void (*action)(node_t, void *), void *data, node_t node) {
+  tree_run_order(action, data, TREE_RUN_INORDER, node);
 }
-void tree_run_depth_pos(void (*action)(node_t, void *), void *data,
+void tree_run_postorder(void (*action)(node_t, void *), void *data,
                         node_t node) {
-  tree_run_depth(action, data, TREE_RUN_POS, node);
+  tree_run_order(action, data, TREE_RUN_POSTORDER, node);
 }
 void tree_run_breadth(void (*action)(node_t, void *), void *data, node_t node) {
-  tree_breadth(action(Tval, data), node);
+  tree_breadth(action(T.val, data), node);
 }

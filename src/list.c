@@ -5,10 +5,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-struct list_controller L = {list_new_list, list_del_list, list_insert,
-                            list_append,   list_prepend,  list_pop,
-                            list_pop_head, list_pop_tail, list_get,
-                            list_get_head, list_get_tail};
+struct list_controller L = {
+    list_new_list, list_del_list, list_insert,   list_append,
+    list_prepend,  list_pop,      list_pop_head, list_pop_tail,
+    list_get,      list_get_head, list_get_tail, 0,
+    NULL,
+};
 
 elem_t list_new_elem(void *val) {
   elem_t el = (elem_t)malloc(sizeof(struct elem));
@@ -101,7 +103,7 @@ void *list_pop(size_t pos, list_t list) {
 
 void *list_pop_head(list_t list) { return list_pop(0, list); }
 
-void *list_pop_tail(list_t list) { return list_pop(list->size, list); }
+void *list_pop_tail(list_t list) { return list_pop(list->size - 1, list); }
 
 void *list_get(size_t pos, list_t list) {
   elem_t el = list_get_elem(pos, list);

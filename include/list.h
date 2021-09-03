@@ -1,7 +1,13 @@
 #ifndef __LIST_H__
 #define __LIST_H__
 
+#ifndef new
+#define new __new
+#endif
+
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct elem {
   void *val;
@@ -27,6 +33,8 @@ struct list_controller {
   void *(*get)(size_t, list_t);
   void *(*get_head)(list_t);
   void *(*get_tail)(list_t);
+  size_t pos;
+  void *val;
 };
 
 elem_t list_new_elem(void *val);
@@ -49,15 +57,37 @@ void *list_get(size_t pos, list_t list);
 void *list_get_head(list_t list);
 void *list_get_tail(list_t list);
 
-#define list_map(code, list)                                                   \
+#define list_map(code, list, ...)                                              \
   {                                                                            \
-    elem_t __map_el = list->head;                                              \
-    void *Lval;                                                                \
+    __VA_OPT__(                                                                \
+        if (strcmp(#__VA_ARGS__, "head") && strcmp(#__VA_ARGS__, "tail")) {    \
+          perror("Invalid map start\n");                                       \
+          exit(EXIT_FAILURE);                                                  \
+        });                                                                    \
+    size_t __map_pos = L.pos;                                                  \
+    void *__map_val = L.val;                                                   \
+    elem_t __map_el;                                                           \
+    L.pos = 0;                                                                 \
+    __VA_OPT__(if (0))                                                         \
+    __map_el = list->head;                                                     \
+    __VA_OPT__(else __map_el = list->__VA_ARGS__;)                             \
     while (__map_el) {                                                         \
-      Lval = __map_el->val;                                                    \
-      code;                                                                    \
+      L.val = __map_el->val;                                                   \
+      { code; }                                                                \
+      L.pos++;                                                                 \
+      __VA_OPT__(if (0))                                                       \
       __map_el = __map_el->next;                                               \
+      __VA_OPT__(else {                                                        \
+        elem_t __map_el_head = __map_el->next;                                 \
+        elem_t __map_el_tail = __map_el->prev;                                 \
+        __map_el = __map_el_##__VA_ARGS__;                                     \
+        __map_el_head = __map_el_tail; /* Remove warning */                    \
+        __map_el_tail = __map_el_head; /* Remove warning */                    \
+      })                                                                       \
     }                                                                          \
+    L.pos = __map_pos;                                                         \
+    L.val = __map_val;                                                         \
+    __map_el = NULL;                                                           \
   }
 
 #endif
