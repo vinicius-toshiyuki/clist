@@ -1,35 +1,96 @@
 %define lr.type canonical-lr
-%define api.value.type { char * }
+%define api.value.type { node_t }
 
 %{
 #include <stdio.h>
 #include <stdlib.h>
 #include <lexer.h>
 #include <list.h>
+#include <util.h>
+#include <syntax/value.h>
 
 int yyerror(char *msg);
 int yylex();
 %}
 
+%code requires {
+#include <tree.h>
+}
+
+%token TERROR
 %token TINT TTYPE TID
+
+%right '='
+%left '-'
+%left '+'
+%left '/'
+%left '*'
 
 %%
 
-prog: declr_list
+prog: stmt
     ;
 
+stmt:
+     declr ';'
+     | exp ';' {
+        tree_postorder({
+            printf("%s\n", ((syn_val_t *)T.val)->base.tag);
+            free(((syn_val_t *)T.val)->base.tag);
+            free(T.val);
+        }, $1);
+        T.del($1);
+     }
+     | ';'
+     ;
+
 declr:
-    TTYPE TID ';' {
-        printf("type: %s, id: %s\n", $1, $2);
-        free($1);
-        free($2);
+    TTYPE TID {
+        syn_val_t *val = new_syn_val(SYN_DECLR, strdup("declr"));
+        $$ = T.new(val);
+        T.join($1, $$);
+        T.join($2, $$);
     }
     ;
 
-declr_list:
-    declr
-    | declr_list declr
-    ;
+exp:
+   TID
+   | TINT
+   | '(' exp ')' { $$ = $2; }
+   | exp '*' exp {
+        syn_val_t *val = new_syn_val(SYN_EXP, strdup("mul"));
+        $$ = T.new(val);
+        T.join($1, $$);
+        T.join($3, $$);
+   }
+   | exp '/' exp {
+        syn_val_t *val = new_syn_val(SYN_EXP, strdup("div"));
+        $$ = T.new(val);
+        T.join($1, $$);
+        T.join($3, $$);
+   }
+   | exp '+' exp {
+        syn_val_t *val = new_syn_val(SYN_EXP, strdup("add"));
+        $$ = T.new(val);
+        T.join($1, $$);
+        T.join($3, $$);
+   }
+   | exp '-' exp {
+        syn_val_t *val = new_syn_val(SYN_EXP, strdup("sub"));
+        $$ = T.new(val);
+        T.join($1, $$);
+        T.join($3, $$);
+   }
+   | exp '=' exp {
+        syn_val_t *val = new_syn_val(SYN_EXP, strdup("assign"));
+        // NOTE: isso é coisa do sintático?
+        // val->exp.dtype = deref($1->val, syn_val_t).exp.data_type;
+        // val->exp.lval = TRUE;
+        $$ = T.new(val);
+        T.join($1, $$);
+        T.join($3, $$);
+   }
+   ;
 
 %%
 

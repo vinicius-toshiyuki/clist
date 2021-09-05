@@ -2,6 +2,10 @@
 %{
 #include <string.h>
 #include <parser.h>
+#include <tree.h>
+#include <util.h>
+#include <syntax/value.h>
+#include <stdio.h>
 %}
 
 NDIGIT [1-9]
@@ -18,9 +22,32 @@ WS [ \t\n]+
 
 {WS} /* skip */
 
-{INT} { yylval = strdup(yytext); return TINT; }
+{INT} {
+    syn_val_t *val = new_syn_val(SYN_EXP, strdup(yytext));
+    val->exp.dtype = SYN_INT;
+    val->exp.lval = FALSE;
+    yylval = T.new(val);
+    return TINT;
+}
 
-{TYPE} { yylval = strdup(yytext); return TTYPE; }
-{ID} { yylval = strdup(yytext); return TID; }
+{TYPE} {
+    syn_val_t *val = new_syn_val(SYN_DTYPE, strdup(yytext));
+    yylval = T.new(val);
+    return TTYPE;
+}
+{ID} {
+    syn_val_t *val = new_syn_val(SYN_ID, strdup(yytext));
+    yylval = T.new(val);
+    return TID;
+}
 
-. { return yytext[0]; }
+"=" return '=';
+"*" return '*';
+"/" return '/';
+"+" return '+';
+"-" return '-';
+"(" return '(';
+")" return ')';
+";" return ';';
+
+. { fprintf(stderr, "> (%s)\n", yytext); perror("Unexpected char"); return TERROR; }

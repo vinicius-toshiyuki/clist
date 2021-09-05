@@ -19,20 +19,25 @@ struct tree_run_controller {
   void (*breadth)(void (*)(node_t, void *), void *, node_t);
 };
 enum tree_run_order { TREE_RUN_INORDER, TREE_RUN_POSTORDER };
+enum tree_del_mode { TREE_DEL_SOFT, TREE_DEL_HARD };
 
 struct tree_controller {
   node_t (*new)(void *);
   void (*del)(node_t);
+  void (*hard_del)(node_t);
   node_t (*add)(void *, node_t);
   void (*join)(node_t, node_t);
   struct tree_run_controller run;
   void *val;
   size_t lvl;
+  enum tree_del_mode del_mode;
 };
 
 node_t tree_new_node(void *val);
 void tree_del_node(node_t node);
 void tree_del_sub_tree(node_t node);
+void tree_hard_del_node(node_t node);
+void tree_hard_del_sub_tree(node_t node);
 node_t tree_add(void *val, node_t node);
 void tree_join(node_t branch, node_t tree);
 

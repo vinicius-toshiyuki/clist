@@ -1,3 +1,4 @@
+#include <stdio.h>
 #define __TREE_NO_CONTROL__
 #include <tree.h>
 #undef __TREE_NO_CONTROL__
@@ -6,11 +7,13 @@
 struct tree_controller T = {
     tree_new_node,
     tree_del_node,
+    tree_hard_del_node,
     tree_add,
     tree_join,
     {tree_run_inorder, tree_run_postorder, tree_run_breadth},
     NULL,
-    0};
+    0,
+    TREE_DEL_SOFT};
 
 node_t tree_new_node(void *val) {
   node_t node = alloc(struct node);
@@ -38,7 +41,22 @@ void tree_del_sub_tree(node_t node) {
     list_map(tree_del_sub_tree(L.val), node->branches);
     L.del(node->branches);
   }
-  free(node);
+  switch (T.del_mode) {
+  case TREE_DEL_HARD:
+    free(node->val);
+  case TREE_DEL_SOFT:
+    free(node);
+    break;
+  default:
+    perror("Invalid del_mode");
+  }
+}
+
+void tree_hard_del_node(node_t node) {
+  int del_mode = T.del_mode;
+  T.del_mode = TREE_DEL_HARD;
+  tree_del_node(node);
+  T.del_mode = del_mode;
 }
 
 node_t tree_add(void *val, node_t node) {
