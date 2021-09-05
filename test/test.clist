@@ -1,1 +1,13 @@
-a = 38 + (b = 7);
+int a;
+int b;
+float c;
+
+float x(int a, int b) {
+    int a;
+    3 + 2;
+    {
+        7 - 83 * (a = 92);
+    }
+    a + x(a, a);
+    ;
+}

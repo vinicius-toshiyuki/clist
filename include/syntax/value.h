@@ -3,7 +3,13 @@
 
 #include <util.h>
 
-typedef enum syn_type { SYN_EXP, SYN_DTYPE, SYN_ID, SYN_DECLR } syn_type_t;
+typedef enum syn_type {
+  SYN_EXP,
+  SYN_DTYPE,
+  SYN_ID,
+  SYN_DECLR,
+  SYN_BLOCK
+} syn_type_t;
 
 typedef enum syn_data { SYN_INT, SYN_FLOAT } syn_data_t;
 
