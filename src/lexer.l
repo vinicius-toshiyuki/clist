@@ -1,4 +1,4 @@
-%option nounput noinput noyywrap
+%option nounput noinput noyywrap yylineno
 %{
 #include <string.h>
 #include <parser.h>
@@ -6,6 +6,16 @@
 #include <util.h>
 #include <syntax/value.h>
 #include <stdio.h>
+
+int yycolumn = 1;
+
+#define YY_USER_ACTION \
+    yylloc.first_line = yylloc.last_line = yylineno; \
+    yylloc.first_column = yycolumn; \
+    if (yytext[0] == '\n') yycolumn =  1; \
+    else yycolumn += yyleng; \
+    yylloc.last_column = yycolumn - 1;
+
 %}
 
 NDIGIT [1-9]
@@ -16,11 +26,11 @@ ID ([_[:alpha:]][_[:alnum:]]*)
 
 INT {NDIGIT}{DIGIT}*
 
-WS [ \t\n]+
+WS [ \t]+
 
 %%
 
-{WS} /* skip */
+"\n"|{WS} /* skip */
 
 {INT} {
     syn_val_t *val = new_syn_val(SYN_EXP, strdup(yytext));
@@ -53,4 +63,4 @@ WS [ \t\n]+
 "," return ',';
 ";" return ';';
 
-. { fprintf(stderr, "> (%s)\n", yytext); perror("Unexpected char"); return TERROR; }
+. { fprintf(stderr, "> (%s)\n", yytext); perror("Unexpected char"); return YYerror; }

@@ -8,7 +8,8 @@ typedef enum syn_type {
   SYN_DTYPE,
   SYN_ID,
   SYN_DECLR,
-  SYN_BLOCK
+  SYN_BLOCK,
+  SYN_STMT
 } syn_type_t;
 
 typedef enum syn_data { SYN_INT, SYN_FLOAT } syn_data_t;

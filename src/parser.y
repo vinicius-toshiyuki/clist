@@ -46,11 +46,10 @@ int yylex();
     L.del($$);
 }<list>
 
-%token TERROR
 %token<node> TINT TTYPE TID
 
 %type<node> stmt stmt.block
-%type<node> exp
+%type<node> exp exp.basic
 %type<node> declr declr.fn param
 
 %type<list> declr.seq
@@ -66,19 +65,27 @@ int yylex();
 
 %%
 
-prog: declr.seq {
+prog:
+    declr.seq {
         list_map({
-            printf("=== declr %lu ===\n", L.pos);
-            tree_postorder({
+            tree_inorder({
                 syn_val_t *val = T.val;
+                if (T.lvl) {
+                    for (int i = 0; i < T.lvl; i++)
+                        printf("  ");
+                    printf("└─○ ");
+                } else {
+                    printf("──● ");
+                }
                 if (T.val) {
                     printf("%s\n", val->base.tag);
                     free(val->base.tag);
                     free(val);
+                } else {
+                    printf("(error)\n");
                 }
             }, L.val);
             T.del(L.val);
-            printf("=== === === ===\n");
         }, $1);
         L.del($1);
     }
@@ -88,7 +95,12 @@ stmt:
      declr ';'
      | exp ';'
      | stmt.block
-     | ';' { $$ = T.new(NULL); }
+     | ';' { $$ = T.new(new_syn_val(SYN_STMT, strdup("empty"))); }
+     | error ';' {
+        fprintf(stderr, "expected a statement (@%d:%d,%d:%d)\n",
+            @$.first_line, @$.first_column, @$.last_line, @$.last_column);
+        $$ = T.new(NULL);
+     }
      ;
 
 stmt.block:
@@ -131,10 +143,19 @@ param:
      }
      ;
 
+exp.basic:
+    TID
+    | TINT
+    ;
+
 exp:
-   TID
-   | TINT
+   exp.basic
    | '(' exp ')' { $$ = $2; }
+   | '(' error ')' {
+        $$ = T.new(NULL);
+        fprintf(stderr, "expected an expression (@%d:%d,%d:%d)\n",
+            @2.first_line, @2.first_column, @2.last_line, @2.last_column);
+   }
    | TID '(' exp.seq.opt ')' {
         syn_val_t *val = new_syn_val(SYN_EXP, strdup("fn"));
         $$ = T.new(val);
@@ -142,6 +163,14 @@ exp:
         node_t args = T.add(new_syn_val(SYN_DECLR, strdup("exp.seq")), $$);
         list_map(T.join(L.val, args), $3);
         L.del($3);
+   }
+   | TID '(' error ')' {
+        syn_val_t *val = new_syn_val(SYN_EXP, strdup("fn"));
+        $$ = T.new(val);
+        T.join($1, $$);
+        T.add(NULL, $$);
+        fprintf(stderr, "invalid arguments (@%d:%d,%d:%d)\n",
+            @3.first_line, @3.first_column, @3.last_line, @3.last_column);
    }
    | exp '*' exp {
         syn_val_t *val = new_syn_val(SYN_EXP, strdup("mul"));
@@ -202,6 +231,11 @@ declr.seq:
 exp.seq:
     exp { $$ = L.new(); L.append($1, $$); }
     | exp.seq ',' exp { $$ =$1; L.append($3, $$); }
+    | error ',' exp {
+        $$ = L.new(); L.append($3, $$);
+        fprintf(stderr, "invalid expression (@%d:%d,%d:%d)\n",
+            @1.first_line, @1.first_column, @1.last_line, @1.last_column);
+    }
     ;
 
 exp.seq.opt:
@@ -212,7 +246,7 @@ exp.seq.opt:
 %%
 
 int yyerror(char *msg) {
-    printf("%s\n", msg);
+    fprintf(stderr, "%s: %d:%d: ", msg, yylloc.first_line, yylloc.first_column);
     return 0;
 }
 
