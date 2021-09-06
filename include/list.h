@@ -33,6 +33,7 @@ struct list_controller {
   void *(*get)(size_t, list_t);
   void *(*get_head)(list_t);
   void *(*get_tail)(list_t);
+  void (*update)(void *, size_t, list_t);
   size_t pos;
   void *val;
 };
@@ -56,6 +57,8 @@ void *list_pop_tail(list_t list);
 void *list_get(size_t pos, list_t list);
 void *list_get_head(list_t list);
 void *list_get_tail(list_t list);
+
+void list_update(void *val, size_t pos, list_t list);
 
 #define list_map(code, list, ...)                                              \
   {                                                                            \

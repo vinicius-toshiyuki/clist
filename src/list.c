@@ -6,9 +6,19 @@
 #include <stdlib.h>
 
 struct list_controller L = {
-    list_new_list, list_del_list, list_insert,   list_append,
-    list_prepend,  list_pop,      list_pop_head, list_pop_tail,
-    list_get,      list_get_head, list_get_tail, 0,
+    list_new_list,
+    list_del_list,
+    list_insert,
+    list_append,
+    list_prepend,
+    list_pop,
+    list_pop_head,
+    list_pop_tail,
+    list_get,
+    list_get_head,
+    list_get_tail,
+    list_update,
+    0,
     NULL,
 };
 
@@ -113,3 +123,8 @@ void *list_get(size_t pos, list_t list) {
 void *list_get_head(list_t list) { return list_get(0, list); }
 
 void *list_get_tail(list_t list) { return list_get(list->size, list); }
+
+void list_update(void *val, size_t pos, list_t list) {
+  elem_t el = list_get_elem(pos, list);
+  el->val = val;
+}
