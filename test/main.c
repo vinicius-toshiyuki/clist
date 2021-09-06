@@ -1,4 +1,5 @@
 #include "../include/list.h"
+#include "../include/slist.h"
 #include "../include/tree.h"
 #include "../include/util.h"
 #include <stdio.h>
@@ -41,6 +42,28 @@ int main() {
   tree_inorder(printf("%d(%lu) ", T.val ? deref(T.val, int) : 0, T.lvl), node);
   printf("<- inorder\n");
   T.del(node);
+
+  slist_t sl = SL.new();
+  SL.insert(val, 10, sl);
+  SL.insert(val + 1, 1, sl);
+  SL.insert(val + 2, 15, sl);
+  SL.insert(val + 3, 10, sl);
+  SL.update(val + 4, 15, sl);
+  SL.insert(val + 5, 7, sl);
+  SL.insert(val + 6, 7, sl);
+  SL.insert(val + 7, 7, sl);
+  SL.insert(val + 8, 7, sl);
+  SL.insert(val + 9, 1, sl);
+  SL.insert(val + 8, 1, sl);
+  SL.insert(val + 7, 1, sl);
+  SL.insert(val + 6, 1, sl);
+  SL.insert(val + 5, 1, sl);
+  SL.insert(val + 4, 1, sl);
+  SL.insert(val + 3, 1, sl);
+
+  slist_map(printf("> sl[%lu] => %d\n", SL.pos, *((int *)SL.val)), sl);
+
+  SL.del(sl);
 
   return 0;
 }
