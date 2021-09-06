@@ -6,14 +6,29 @@
 #include <util.h>
 #include <syntax/value.h>
 #include <stdio.h>
+#include <slist.h>
 
 int yycolumn = 1;
 
-#define YY_USER_ACTION \
-    yylloc.first_line = yylloc.last_line = yylineno; \
-    yylloc.first_column = yycolumn; \
-    if (yytext[0] == '\n') yycolumn =  1; \
-    else yycolumn += yyleng; \
+#define YY_USER_ACTION                                           \
+    yylloc.first_line = yylloc.last_line = yylineno;             \
+    yylloc.first_column = yycolumn;                              \
+    if (yylloc.lines->size == 0) {                               \
+        SL.insert(strdup(""), 1, yylloc.lines);                  \
+    }                                                            \
+    if (yytext[0] == '\n') {                                     \
+        yycolumn =  1;                                           \
+        SL.insert(strdup(yytext + 1), yylineno, yylloc.lines);       \
+    } else {                                                     \
+        yycolumn += yyleng;                                      \
+        char *line_cur = SL.get(yylineno, yylloc.lines);         \
+        size_t line_len = strlen(line_cur) + strlen(yytext) + 1; \
+        char *line_cat = (char *)calloc(line_len, sizeof(char)); \
+        strcat(line_cat, line_cur);                              \
+        strcat(line_cat, yytext);                                \
+        free(line_cur);                                          \
+        SL.update(line_cat, yylineno, yylloc.lines);             \
+    }                                                            \
     yylloc.last_column = yycolumn - 1;
 
 %}

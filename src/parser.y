@@ -1,4 +1,5 @@
 %define lr.type canonical-lr
+%define api.location.type { location_t }
 
 %{
 #include <stdio.h>
@@ -7,13 +8,31 @@
 #include <list.h>
 #include <util.h>
 #include <syntax/value.h>
+#include <slist.h>
 
 int yyerror(char *msg);
 int yylex();
 %}
 
+%initial-action {
+    @$.first_line = 1;
+    @$.first_column = 1;
+    @$.last_line = 1;
+    @$.last_column = 1;
+    @$.lines = SL.new();
+}
+
 %code requires {
 #include <tree.h>
+#include <slist.h>
+
+typedef struct location {
+    int first_line;
+    int first_column;
+    int last_line;
+    int last_column;
+    slist_t lines;
+} location_t;
 }
 
 %union {
@@ -99,6 +118,12 @@ stmt:
      | error ';' {
         fprintf(stderr, "expected a statement (@%d:%d,%d:%d)\n",
             @$.first_line, @$.first_column, @$.last_line, @$.last_column);
+        slist_map({
+            if (SL.pos > @$.last_line) break;
+            if (SL.pos >= @$.first_line) {
+                fprintf(stderr, "%lu | %s\n", SL.pos, (char *)SL.val);
+            }
+        }, yylloc.lines);
         $$ = T.new(NULL);
      }
      ;
@@ -155,6 +180,12 @@ exp:
         $$ = T.new(NULL);
         fprintf(stderr, "expected an expression (@%d:%d,%d:%d)\n",
             @2.first_line, @2.first_column, @2.last_line, @2.last_column);
+        slist_map({
+            if (SL.pos > @$.last_line) break;
+            if (SL.pos >= @$.first_line) {
+                fprintf(stderr, "%lu | %s\n", SL.pos, (char *)SL.val);
+            }
+        }, yylloc.lines);
    }
    | TID '(' exp.seq.opt ')' {
         syn_val_t *val = new_syn_val(SYN_EXP, strdup("fn"));
@@ -171,6 +202,12 @@ exp:
         T.add(NULL, $$);
         fprintf(stderr, "invalid arguments (@%d:%d,%d:%d)\n",
             @3.first_line, @3.first_column, @3.last_line, @3.last_column);
+        slist_map({
+            if (SL.pos > @$.last_line) break;
+            if (SL.pos >= @$.first_line) {
+                fprintf(stderr, "%lu | %s\n", SL.pos, (char *)SL.val);
+            }
+        }, yylloc.lines);
    }
    | exp '*' exp {
         syn_val_t *val = new_syn_val(SYN_EXP, strdup("mul"));
@@ -235,6 +272,12 @@ exp.seq:
         $$ = L.new(); L.append($3, $$);
         fprintf(stderr, "invalid expression (@%d:%d,%d:%d)\n",
             @1.first_line, @1.first_column, @1.last_line, @1.last_column);
+        slist_map({
+            if (SL.pos > @$.last_line) break;
+            if (SL.pos >= @$.first_line) {
+                fprintf(stderr, "%lu | %s\n", SL.pos, (char *)SL.val);
+            }
+        }, yylloc.lines);
     }
     ;
 
@@ -246,7 +289,7 @@ exp.seq.opt:
 %%
 
 int yyerror(char *msg) {
-    fprintf(stderr, "%s: %d:%d: ", msg, yylloc.first_line, yylloc.first_column);
+    fprintf(stderr, "%s: ", msg);
     return 0;
 }
 
@@ -258,5 +301,7 @@ int main(int argc, char **argv) {
     yyparse();
     fclose(yyin);
     yylex_destroy();
+    slist_map(free(SL.val), yylloc.lines);
+    SL.del(yylloc.lines);
     return 0;
 }
