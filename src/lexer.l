@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <slist.h>
 
+void yyerror(char *msg);
+
 int yycolumn = 1;
 
 #define YY_USER_ACTION                                           \
@@ -18,7 +20,7 @@ int yycolumn = 1;
     }                                                            \
     if (yytext[0] == '\n') {                                     \
         yycolumn =  1;                                           \
-        SL.insert(strdup(yytext + 1), yylineno, yylloc.lines);       \
+        SL.insert(strdup(yytext + 1), yylineno, yylloc.lines);   \
     } else {                                                     \
         yycolumn += yyleng;                                      \
         char *line_cur = SL.get(yylineno, yylloc.lines);         \
@@ -47,6 +49,26 @@ WS [ \t]+
 
 "\n"|{WS} /* skip */
 
+"return" {
+    syn_val_t *val = new_syn_val(SYN_STMT, strdup(yytext));
+    yylval.node = T.new(val);
+    return TRETURN;
+}
+
+"=" return '=';
+"*" return '*';
+"/" return '/';
+"%" return '%';
+"+" return '+';
+"-" return '-';
+
+"(" return '(';
+")" return ')';
+"{" return '{';
+"}" return '}';
+"," return ',';
+";" return ';';
+
 {INT} {
     syn_val_t *val = new_syn_val(SYN_EXP, strdup(yytext));
     val->exp.dtype = SYN_INT;
@@ -66,16 +88,7 @@ WS [ \t]+
     return TID;
 }
 
-"=" return '=';
-"*" return '*';
-"/" return '/';
-"+" return '+';
-"-" return '-';
-"(" return '(';
-")" return ')';
-"{" return '{';
-"}" return '}';
-"," return ',';
-";" return ';';
-
-. { fprintf(stderr, "> (%s)\n", yytext); perror("Unexpected char"); return YYerror; }
+. { 
+    yyerror("lexical error");
+    return YYerror;
+}

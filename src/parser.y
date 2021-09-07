@@ -10,8 +10,52 @@
 #include <syntax/value.h>
 #include <slist.h>
 
-int yyerror(char *msg);
+void yyerror(char *msg);
 int yylex();
+
+#define yyerror_details(loc, range, msg) {                                                    \
+    fprintf(stderr, msg " \033[90m(@%d:%d,%d:%d)\033[0m\n",                                   \
+        loc.first_line, loc.first_column, loc.last_line, loc.last_column);                    \
+    slist_map({                                                                               \
+        if (SL.pos > range.last_line) break;                                                  \
+        if (SL.pos >= range.first_line)                                                       \
+        if (SL.pos == loc.first_line) {                                                       \
+            fprintf(stderr, "%4lu | %.*s\033[31;4;1m%.*s\033[0m%.*s\033[90m%s\033[0m\n",      \
+                SL.pos, loc.first_column - 1, (char *)SL.val,                                 \
+                SL.pos == loc.last_line ?                                                     \
+                    loc.last_column - loc.first_column + 1:                                   \
+                    (int) strlen(SL.val) - (loc.first_column - 1),                            \
+                ((char *)SL.val) + loc.first_column - 1,                                      \
+                                                                                              \
+                SL.pos == loc.last_line ? (int) strlen(SL.val) - loc.last_column : 0,         \
+                ((char *)SL.val) + loc.last_column, SL.pos == loc.last_line ? "..." : "↴"     \
+                );                                                                            \
+        } else if (SL.pos == loc.last_line) {                                                 \
+            fprintf(stderr, "%4lu | \033[31;4;1m%.*s\033[0m%s\033[90m...\033[0m\n",           \
+                SL.pos, loc.last_column, (char *)SL.val, ((char *)SL.val) + loc.last_column); \
+        } else {                                                                              \
+            fprintf(stderr, "%4lu | \033[31;4;1m%s\033[0m\033[90m↴\033[0m\n",                 \
+                SL.pos, (char *)SL.val);                                                      \
+        }                                                                                     \
+    }, yylloc.lines);                                                                         \
+    yyerrok;                                                                                  \
+}
+
+#define EXP_BIN(tag, first, last, res)                      \
+    {                                                       \
+        syn_val_t *val = new_syn_val(SYN_EXP, strdup(tag)); \
+        res = T.new(val);                                   \
+        T.join(first, res);                                 \
+        T.join(last, res);                                  \
+    }
+#define EXP_BIN_ERR(tag, msg, loc, range, last, res)        \
+    {                                                       \
+        yyerror_details(loc, range, msg);                   \
+        syn_val_t *val = new_syn_val(SYN_EXP, strdup(tag)); \
+        res = T.new(val);                                   \
+        T.join(last, res);                                  \
+    }
+
 %}
 
 %initial-action {
@@ -65,7 +109,7 @@ typedef struct location {
     L.del($$);
 }<list>
 
-%token<node> TINT TTYPE TID
+%token<node> TINT TTYPE TID TRETURN
 
 %type<node> stmt stmt.block
 %type<node> exp exp.basic
@@ -80,32 +124,41 @@ typedef struct location {
 %left '-'
 %left '+'
 %left '/'
+%left '%'
 %left '*'
 
 %%
 
 prog:
     declr.seq {
-        list_map({
-            tree_inorder({
-                syn_val_t *val = T.val;
-                if (T.lvl) {
-                    for (int i = 0; i < T.lvl; i++)
-                        printf("  ");
-                    printf("└─○ ");
-                } else {
-                    printf("──● ");
+        int arr[1000];
+        list_map({ tree_inorder({
+            syn_val_t *val = T.val;
+            if (T.lvl) {
+                if (__tree_order_current == __tree_order_current->top->branches->tail->val)
+                    arr[T.lvl] = 0;
+                else
+                    arr[T.lvl] = 1;
+                for (int i = 0; i < T.lvl; i++) {
+                    printf("%s", i && arr[i] ? "│ " : "  ");
+                    // printf("%lu ", i ? arr[i] : 0lu);
                 }
-                if (T.val) {
-                    printf("%s\n", val->base.tag);
-                    free(val->base.tag);
-                    free(val);
-                } else {
-                    printf("(error)\n");
-                }
-            }, L.val);
-            T.del(L.val);
-        }, $1);
+                char *branch = NULL;
+                if (__tree_order_current == __tree_order_current->top->branches->tail->val)
+                    branch = "└─%s──○ "; else
+                    branch = "├─%s──○ ";
+                printf(branch, __tree_order_current->branches ? "┬" : "─");
+            } else {
+                printf("──%s● ", __tree_order_current->branches ? "┬" : "─");
+            }
+            if (T.val) {
+                printf("%s\n", val->base.tag);
+                free(val->base.tag);
+                free(val);
+            } else {
+                printf("(error)\n");
+            }
+        }, L.val); T.del(L.val); }, $1);
         L.del($1);
     }
     ;
@@ -114,16 +167,14 @@ stmt:
      declr ';'
      | exp ';'
      | stmt.block
+     | TRETURN exp ';' { $$ = $1; T.join($2, $$); }
+     | TRETURN error ';' {
+        $$ = $1;
+        yyerror_details(@2, @$, "expected an expression to return");
+     }
      | ';' { $$ = T.new(new_syn_val(SYN_STMT, strdup("empty"))); }
      | error ';' {
-        fprintf(stderr, "expected a statement (@%d:%d,%d:%d)\n",
-            @$.first_line, @$.first_column, @$.last_line, @$.last_column);
-        slist_map({
-            if (SL.pos > @$.last_line) break;
-            if (SL.pos >= @$.first_line) {
-                fprintf(stderr, "%lu | %s\n", SL.pos, (char *)SL.val);
-            }
-        }, yylloc.lines);
+        yyerror_details(@1, @$, "expected a statement");
         $$ = T.new(NULL);
      }
      ;
@@ -178,14 +229,7 @@ exp:
    | '(' exp ')' { $$ = $2; }
    | '(' error ')' {
         $$ = T.new(NULL);
-        fprintf(stderr, "expected an expression (@%d:%d,%d:%d)\n",
-            @2.first_line, @2.first_column, @2.last_line, @2.last_column);
-        slist_map({
-            if (SL.pos > @$.last_line) break;
-            if (SL.pos >= @$.first_line) {
-                fprintf(stderr, "%lu | %s\n", SL.pos, (char *)SL.val);
-            }
-        }, yylloc.lines);
+        yyerror_details(@2, @$, "expected an expression");
    }
    | TID '(' exp.seq.opt ')' {
         syn_val_t *val = new_syn_val(SYN_EXP, strdup("fn"));
@@ -200,48 +244,20 @@ exp:
         $$ = T.new(val);
         T.join($1, $$);
         T.add(NULL, $$);
-        fprintf(stderr, "invalid arguments (@%d:%d,%d:%d)\n",
-            @3.first_line, @3.first_column, @3.last_line, @3.last_column);
-        slist_map({
-            if (SL.pos > @$.last_line) break;
-            if (SL.pos >= @$.first_line) {
-                fprintf(stderr, "%lu | %s\n", SL.pos, (char *)SL.val);
-            }
-        }, yylloc.lines);
+        yyerror_details(@3, @$, "invalid arguments");
    }
-   | exp '*' exp {
-        syn_val_t *val = new_syn_val(SYN_EXP, strdup("mul"));
-        $$ = T.new(val);
-        T.join($1, $$);
-        T.join($3, $$);
-   }
-   | exp '/' exp {
-        syn_val_t *val = new_syn_val(SYN_EXP, strdup("div"));
-        $$ = T.new(val);
-        T.join($1, $$);
-        T.join($3, $$);
-   }
-   | exp '+' exp {
-        syn_val_t *val = new_syn_val(SYN_EXP, strdup("add"));
-        $$ = T.new(val);
-        T.join($1, $$);
-        T.join($3, $$);
-   }
-   | exp '-' exp {
-        syn_val_t *val = new_syn_val(SYN_EXP, strdup("sub"));
-        $$ = T.new(val);
-        T.join($1, $$);
-        T.join($3, $$);
-   }
-   | exp '=' exp {
-        syn_val_t *val = new_syn_val(SYN_EXP, strdup("assign"));
-        // NOTE: isso é coisa do sintático?
-        // val->exp.dtype = deref($1->val, syn_val_t).exp.data_type;
-        // val->exp.lval = TRUE;
-        $$ = T.new(val);
-        T.join($1, $$);
-        T.join($3, $$);
-   }
+   | exp '*' exp { EXP_BIN("mul", $1, $3, $$); }
+   | exp '/' exp { EXP_BIN("div", $1, $3, $$); }
+   | exp '%' exp { EXP_BIN("mod", $1, $3, $$); }
+   | exp '+' exp { EXP_BIN("add", $1, $3, $$); }
+   | exp '-' exp { EXP_BIN("sub", $1, $3, $$); }
+   | exp '=' exp { EXP_BIN("assign", $1, $3, $$); }
+   | error '*' exp { EXP_BIN_ERR("mul", "expected an expression", @1, @$, $3, $$); }
+   | error '/' exp { EXP_BIN_ERR("div", "expected an expression", @1, @$, $3, $$); }
+   | error '%' exp { EXP_BIN_ERR("mod", "expected an expression", @1, @$, $3, $$); }
+   | error '+' exp { EXP_BIN_ERR("add", "expected an expression", @1, @$, $3, $$); }
+   | error '-' exp { EXP_BIN_ERR("sub", "expected an expression", @1, @$, $3, $$); }
+   | error '=' exp { EXP_BIN_ERR("assign", "expected an expression", @1, @$, $3, $$); }
    ;
 
 stmt.seq:
@@ -270,14 +286,7 @@ exp.seq:
     | exp.seq ',' exp { $$ =$1; L.append($3, $$); }
     | error ',' exp {
         $$ = L.new(); L.append($3, $$);
-        fprintf(stderr, "invalid expression (@%d:%d,%d:%d)\n",
-            @1.first_line, @1.first_column, @1.last_line, @1.last_column);
-        slist_map({
-            if (SL.pos > @$.last_line) break;
-            if (SL.pos >= @$.first_line) {
-                fprintf(stderr, "%lu | %s\n", SL.pos, (char *)SL.val);
-            }
-        }, yylloc.lines);
+        yyerror_details(@1, @$, "invalid expression");
     }
     ;
 
@@ -288,9 +297,8 @@ exp.seq.opt:
 
 %%
 
-int yyerror(char *msg) {
-    fprintf(stderr, "%s: ", msg);
-    return 0;
+void yyerror(char *msg) {
+    fprintf(stderr, "\033[33;1m%s\033[0m: ", msg);
 }
 
 int main(int argc, char **argv) {
