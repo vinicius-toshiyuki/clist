@@ -75,7 +75,8 @@ void tree_run_breadth(void (*action)(node_t, void *), void *data, node_t node);
       __tree_order_prev = __tree_order_current;                                \
       if (__tree_order_current->top &&                                         \
           __tree_order_current ==                                              \
-              __tree_order_current->top->branches->tail->val)                  \
+              __tree_order_current->top->branches->tail->val &&                \
+          __tree_order_current->top->top)                                      \
         __tree_order_dive_count++;                                             \
       if (__tree_order_current->branches) {                                    \
         __VA_OPT__(                                                            \
