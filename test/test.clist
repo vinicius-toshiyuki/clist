@@ -3,6 +3,7 @@ int b;
 float c;
 
 float x(int a, int b) {
+    int ^; 3 + 3;
     int ;
     3 + 2;
     {
@@ -12,5 +13,7 @@ float x(int a, int b) {
         a + 1);
     ;
     x + a
+       
     a+ 3;
+    return  + 1;
 }
