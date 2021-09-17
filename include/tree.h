@@ -102,7 +102,7 @@ void tree_run_breadth(void (*action)(node_t, void *), void *data, node_t node);
     T.lvl = __tree_order_lvl;                                                  \
   }
 
-#define tree_inorder(code, node) tree_order(code, node)
+#define tree_preorder(code, node) tree_order(code, node)
 #define tree_postorder(code, node) tree_order(code, node, post)
 
 #define tree_breadth(code, node)                                               \

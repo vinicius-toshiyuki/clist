@@ -1,5 +1,5 @@
 all:
-	bison -Wcounterexamples --defines=include/parser.h -o src/parser.c src/parser.y
+	bison -Wcounterexamples -Wno-yacc --defines=include/parser.h -o src/parser.c src/parser.y
 	flex --header-file=include/lexer.h -o src/lexer.c src/lexer.l
 	gcc -c src/**/*.c src/*.c -Iinclude -ggdb
 	mv *.o build/
