@@ -41,7 +41,7 @@ DIGIT 0|{NDIGIT}
 TYPE "int"|"float"
 ID ([_[:alpha:]][_[:alnum:]]*)
 
-INT {NDIGIT}{DIGIT}*
+INT ({NDIGIT}{DIGIT}*|{DIGIT})
 
 WS [ \t]+
 
@@ -55,6 +55,28 @@ WS [ \t]+
     return TRETURN;
 }
 
+"if" {
+    syn_val_t *val = new_syn_val(SYN_STMT, strdup(yytext));
+    yylval.node = T.new(val);
+    return TIF;
+}
+
+"else" return TELSE;
+
+"for" {
+    syn_val_t *val = new_syn_val(SYN_STMT, strdup(yytext));
+    yylval.node = T.new(val);
+    return TFOR;
+}
+
+"while" {
+    syn_val_t *val = new_syn_val(SYN_STMT, strdup(yytext));
+    yylval.node = T.new(val);
+    return TWHILE;
+}
+
+"do" return TDO;
+
 "=" return '=';
 "*" return '*';
 "/" return '/';
@@ -62,8 +84,28 @@ WS [ \t]+
 "+" return '+';
 "-" return '-';
 
+"++" return TINC;
+"--" return TDEC;
+
+"!" return '!';
+"==" return TEQ;
+"!=" return TNEQ;
+">" return '>';
+"<" return '<';
+"<=" return TLE;
+">=" return TGE;
+"||" return TOR;
+"&&" return TAND;
+
+"~" return '~';
+"|" return '|';
+"&" return '&';
+"^" return '^';
+
 "(" return '(';
 ")" return ')';
+"[" return '[';
+"]" return ']';
 "{" return '{';
 "}" return '}';
 "," return ',';
@@ -82,6 +124,7 @@ WS [ \t]+
     yylval.node = T.new(val);
     return TTYPE;
 }
+
 {ID} {
     syn_val_t *val = new_syn_val(SYN_ID, strdup(yytext));
     yylval.node = T.new(val);

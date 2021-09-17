@@ -56,6 +56,13 @@ int yylex();
         T.join(last, res);                                  \
     }
 
+#define EXP_UNI(tag, first, res)                            \
+    {                                                       \
+        syn_val_t *val = new_syn_val(SYN_EXP, strdup(tag)); \
+        res = T.new(val);                                   \
+        T.join(first, res);                                 \
+    }
+
 %}
 
 %initial-action {
@@ -82,10 +89,11 @@ typedef struct location {
 %union {
     node_t node;
     list_t list;
+    size_t ival;
 }
 
 %destructor {
-    tree_inorder({
+    tree_preorder({
         syn_val_t *val = T.val;
         if (val) {
             free(val->base.tag);
@@ -97,7 +105,7 @@ typedef struct location {
 
 %destructor {
     list_map({
-        tree_inorder({
+        tree_preorder({
             syn_val_t *val = T.val;
             if (val) {
                 free(val->base.tag);
@@ -109,10 +117,23 @@ typedef struct location {
     L.del($$);
 }<list>
 
-%token<node> TINT TTYPE TID TRETURN
+%destructor { }<*>
 
-%type<node> stmt stmt.block
-%type<node> exp exp.basic
+%token<node> TINT TTYPE TID
+%token<node> TRETURN "return"
+%token<node> TIF "if"
+%token<node> TFOR "for" TWHILE "while"
+%token TELSE "else" TDO "do"
+
+%token TEQ "==" TNEQ "!=" TLE "<=" TGE ">=" TOR "||" TAND "&&"
+%token TINC "++" TDEC "--"
+
+%type<node> type
+%type<ival> type.depth
+%type<node> stmt stmt.block stmt.return stmt.cond stmt.loop
+%type<node> stmt.loop.for stmt.loop.for.arg.first stmt.loop.for.arg
+%type<node> stmt.loop.while stmt.loop.while.do
+%type<node> exp exp.basic exp.binary exp.unary exp.postfix exp.call
 %type<node> declr declr.fn param
 
 %type<list> declr.seq
@@ -121,18 +142,27 @@ typedef struct location {
 %type<list> exp.seq   exp.seq.opt
 
 %right '='
-%left '-'
-%left '+'
-%left '/'
-%left '%'
-%left '*'
+%left "||"
+%left "&&"
+%left '|'
+%left '^'
+%left '&'
+%left "==" "!="
+%left '<' "<=" '>' ">="
+%left '+' '-'
+%left '*' '/' '%'
+%right TUNI '!' '~' "++" "--"
+%left TPOST '[' ']'
+
+%precedence "if"
+%precedence "else"
 
 %%
 
 prog:
     declr.seq {
         int arr[1000];
-        list_map({ tree_inorder({
+        list_map({ tree_preorder({
             syn_val_t *val = T.val;
             if (T.lvl) {
                 if (__tree_order_current == __tree_order_current->top->branches->tail->val)
@@ -152,7 +182,11 @@ prog:
                 printf("──%s● ", __tree_order_current->branches ? "┬" : "─");
             }
             if (T.val) {
-                printf("%s\n", val->base.tag);
+                printf("%s", val->base.tag);
+                if (val->base.type == SYN_DTYPE && val->dtype.depth) {
+                    printf(" (depth %lu)", val->dtype.depth);
+                }
+                printf("\n");
                 free(val->base.tag);
                 free(val);
             } else {
@@ -166,18 +200,117 @@ prog:
 stmt:
      declr ';'
      | exp ';'
+     | stmt.return ';'
      | stmt.block
-     | TRETURN exp ';' { $$ = $1; T.join($2, $$); }
-     | TRETURN error ';' {
-        $$ = $1;
-        yyerror_details(@2, @$, "expected an expression to return");
-     }
+     | stmt.cond
+     | stmt.loop
      | ';' { $$ = T.new(new_syn_val(SYN_STMT, strdup("empty"))); }
      | error ';' {
         yyerror_details(@1, @$, "expected a statement");
         $$ = T.new(NULL);
      }
      ;
+
+stmt.return:
+    TRETURN exp { $$ = $1; T.join($2, $$); }
+    | TRETURN error {
+        $$ = $1;
+        yyerror_details(@2, @$, "expected an expression to return");
+    }
+    ;
+
+stmt.cond:
+    "if" '(' exp ')' stmt %prec "if" {
+        $$ = $1;
+        T.join($3, $$);
+        T.join($5, $$);
+    }
+    | "if" '(' exp ')' stmt "else" stmt %prec "else" {
+        $$ = $1;
+        T.join($3, $$);
+        T.join($5, $$);
+        T.join($7, $$);
+    }
+    | "if" '(' error ')' stmt %prec "if" {
+        yyerror_details(@3, @$, "expected an expression inside if");
+        $$ = $1;
+        T.join($5, $$);
+    }
+    | "if" '(' error ')' stmt "else" stmt %prec "else" {
+        yyerror_details(@3, @$, "expected an expression inside if");
+        $$ = $1;
+        T.join($5, $$);
+        T.join($7, $$);
+    }
+    ;
+
+stmt.loop:
+    stmt.loop.for
+    | stmt.loop.while
+    ;
+
+stmt.loop.while:
+    "while" '(' exp ')' stmt {
+        $$ = $1;
+        T.join($3, $$);
+        T.join($5, $$);
+    }
+    | "while" '(' error ')' stmt {
+        $$ = $1;
+        T.join($5, $$);
+    }
+    | stmt.loop.while.do
+    ;
+
+stmt.loop.while.do:
+    "do" stmt "while" '(' exp ')' ';' {
+        $$ = $3;
+        syn_val_t *val = $$->val;
+        free(val->base.tag);
+        val->base.tag = strdup("while.do");
+        T.join($5, $$);
+        T.join($2, $$);
+    }
+    | "do" stmt "while" '(' error ')' ';' {
+        $$ = $3;
+        syn_val_t *val = $$->val;
+        free(val->base.tag);
+        val->base.tag = strdup("while.do");
+        T.join($2, $$);
+    }
+    ;
+
+stmt.loop.for:
+    "for" '(' stmt.loop.for.arg.first ';' stmt.loop.for.arg ';' stmt.loop.for.arg ')' stmt {
+        $$ = $1;
+        T.join($3, $$);
+        T.join($5, $$);
+        T.join($7, $$);
+        T.join($9, $$);
+    }
+    ;
+
+stmt.loop.for.arg:
+    %empty {
+        syn_val_t *val = new_syn_val(SYN_FOR_ARG, strdup("for.arg"));
+        $$ = T.new(val);
+    }
+    | exp {
+        syn_val_t *val = new_syn_val(SYN_FOR_ARG, strdup("for.arg"));
+        $$ = T.new(val);
+        T.join($1, $$);
+    }
+    | error {
+        syn_val_t *val = new_syn_val(SYN_FOR_ARG, strdup("(error)"));
+        $$ = T.new(val);
+        yyerror_details(@1, @$, "invalid for argument");
+    }
+    ;
+
+stmt.loop.for.arg.first:
+    stmt.loop.for.arg
+    | declr
+    ;
 
 stmt.block:
     '{' stmt.seq '}' {
@@ -188,17 +321,35 @@ stmt.block:
     }
     ;
 
+type:
+    TTYPE
+    | TTYPE type.depth {
+        syn_val_t *val = ($$ = $1)->val;
+        val->dtype.depth = $2;
+    }
+    ;
+
+type.depth:
+    '*' { $$ = 1; }
+    | type.depth '*' { $$ = $1 + 1; }
+    ;
+
 declr:
-    TTYPE TID {
+    type TID {
         syn_val_t *val = new_syn_val(SYN_DECLR, strdup("declr"));
         $$ = T.new(val);
         T.join($1, $$);
         T.join($2, $$);
     }
+    | error TID {
+        syn_val_t *val = new_syn_val(SYN_DECLR, strdup("declr"));
+        $$ = T.new(val);
+        T.join($2, $$);
+    }
     ;
 
 declr.fn:
-    TTYPE TID '(' param.seq.opt ')' stmt.block {
+    type TID '(' param.seq.opt ')' stmt.block {
         syn_val_t *val = new_syn_val(SYN_DECLR, strdup("declr.fn"));
         $$ = T.new(val);
         T.join($1, $$);
@@ -211,7 +362,7 @@ declr.fn:
     ;
 
 param:
-     TTYPE TID {
+     type TID {
         syn_val_t *val = new_syn_val(SYN_DECLR, strdup("param"));
         $$ = T.new(val);
         T.join($1, $$);
@@ -226,12 +377,19 @@ exp.basic:
 
 exp:
    exp.basic
+   | exp.binary
+   | exp.unary
+   | exp.postfix
+   | exp.call
    | '(' exp ')' { $$ = $2; }
    | '(' error ')' {
         $$ = T.new(NULL);
         yyerror_details(@2, @$, "expected an expression");
    }
-   | TID '(' exp.seq.opt ')' {
+   ;
+
+exp.call:
+   TID '(' exp.seq.opt ')' {
         syn_val_t *val = new_syn_val(SYN_EXP, strdup("fn"));
         $$ = T.new(val);
         T.join($1, $$);
@@ -246,18 +404,61 @@ exp:
         T.add(NULL, $$);
         yyerror_details(@3, @$, "invalid arguments");
    }
-   | exp '*' exp { EXP_BIN("mul", $1, $3, $$); }
-   | exp '/' exp { EXP_BIN("div", $1, $3, $$); }
-   | exp '%' exp { EXP_BIN("mod", $1, $3, $$); }
-   | exp '+' exp { EXP_BIN("add", $1, $3, $$); }
-   | exp '-' exp { EXP_BIN("sub", $1, $3, $$); }
-   | exp '=' exp { EXP_BIN("assign", $1, $3, $$); }
-   | error '*' exp { EXP_BIN_ERR("mul", "expected an expression", @1, @$, $3, $$); }
-   | error '/' exp { EXP_BIN_ERR("div", "expected an expression", @1, @$, $3, $$); }
-   | error '%' exp { EXP_BIN_ERR("mod", "expected an expression", @1, @$, $3, $$); }
-   | error '+' exp { EXP_BIN_ERR("add", "expected an expression", @1, @$, $3, $$); }
-   | error '-' exp { EXP_BIN_ERR("sub", "expected an expression", @1, @$, $3, $$); }
-   | error '=' exp { EXP_BIN_ERR("assign", "expected an expression", @1, @$, $3, $$); }
+   ;
+
+exp.postfix:
+      exp   '[' exp ']' %prec TPOST { EXP_BIN("access", $1, $3, $$) }
+    | error '[' exp ']' %prec TPOST { EXP_BIN_ERR("access", "invalid array expression", @1, @$, $3, $$) }
+    | exp '[' error ']' %prec TPOST { EXP_BIN_ERR("access", "invalid array index expression", @3, @$, $1, $$) }
+    | exp "++" %prec TPOST { EXP_UNI("inc.post", $1, $$); }
+    | exp "--" %prec TPOST { EXP_UNI("dec.post", $1, $$); }
+    ;
+
+exp.unary:
+      '+' exp %prec TUNI  { EXP_UNI("plus"   , $2, $$); }
+    | '-' exp %prec TUNI  { EXP_UNI("minus"  , $2, $$); }
+    | '!' exp %prec TUNI  { EXP_UNI("neg"    , $2, $$); }
+    | '~' exp %prec TUNI  { EXP_UNI("neg.bit", $2, $$); }
+    | '*' exp %prec TUNI  { EXP_UNI("deref"  , $2, $$); }
+    | "++" exp %prec TUNI { EXP_UNI("inc"    , $2, $$); }
+    | "--" exp %prec TUNI { EXP_UNI("dec"    , $2, $$); }
+    ;
+
+exp.binary:
+     exp '%'  exp { EXP_BIN("mod"         , $1, $3, $$); }
+   | exp '/'  exp { EXP_BIN("div"         , $1, $3, $$); }
+   | exp '*'  exp { EXP_BIN("mul"         , $1, $3, $$); }
+   | exp '-'  exp { EXP_BIN("sub"         , $1, $3, $$); }
+   | exp '+'  exp { EXP_BIN("add"         , $1, $3, $$); }
+   | exp ">=" exp { EXP_BIN("gte"         , $1, $3, $$); }
+   | exp '>'  exp { EXP_BIN("gt"          , $1, $3, $$); }
+   | exp "<=" exp { EXP_BIN("lte"         , $1, $3, $$); }
+   | exp '<'  exp { EXP_BIN("lt"          , $1, $3, $$); }
+   | exp "!=" exp { EXP_BIN("neq"         , $1, $3, $$); }
+   | exp "==" exp { EXP_BIN("eq"          , $1, $3, $$); }
+   | exp '&'  exp { EXP_BIN("and.bit"     , $1, $3, $$); }
+   | exp '^'  exp { EXP_BIN("or.exclusive", $1, $3, $$); }
+   | exp '|'  exp { EXP_BIN("or.bit"      , $1, $3, $$); }
+   | exp "&&" exp { EXP_BIN("and"         , $1, $3, $$); }
+   | exp "||" exp { EXP_BIN("or"          , $1, $3, $$); }
+   | exp '='  exp { EXP_BIN("assign"      , $1, $3, $$); }
+   | error '%'  exp { EXP_BIN_ERR("mod"         , "expected an expression", @1, @$, $3, $$); }
+   | error '/'  exp { EXP_BIN_ERR("div"         , "expected an expression", @1, @$, $3, $$); }
+   | error '*'  exp { EXP_BIN_ERR("mul"         , "expected an expression", @1, @$, $3, $$); }
+   | error '-'  exp { EXP_BIN_ERR("sub"         , "expected an expression", @1, @$, $3, $$); }
+   | error '+'  exp { EXP_BIN_ERR("add"         , "expected an expression", @1, @$, $3, $$); }
+   | error ">=" exp { EXP_BIN_ERR("gte"         , "expected an expression", @1, @$, $3, $$); }
+   | error '>'  exp { EXP_BIN_ERR("gt"          , "expected an expression", @1, @$, $3, $$); }
+   | error "<=" exp { EXP_BIN_ERR("lte"         , "expected an expression", @1, @$, $3, $$); }
+   | error '<'  exp { EXP_BIN_ERR("lt"          , "expected an expression", @1, @$, $3, $$); }
+   | error "!=" exp { EXP_BIN_ERR("neq"         , "expected an expression", @1, @$, $3, $$); }
+   | error "==" exp { EXP_BIN_ERR("eq"          , "expected an expression", @1, @$, $3, $$); }
+   | error '&'  exp { EXP_BIN_ERR("and.bit"     , "expected an expression", @1, @$, $3, $$); }
+   | error '^'  exp { EXP_BIN_ERR("or.exclusive", "expected an expression", @1, @$, $3, $$); }
+   | error '|'  exp { EXP_BIN_ERR("or.bit"      , "expected an expression", @1, @$, $3, $$); }
+   | error "&&" exp { EXP_BIN_ERR("and"         , "expected an expression", @1, @$, $3, $$); }
+   | error "||" exp { EXP_BIN_ERR("or"          , "expected an expression", @1, @$, $3, $$); }
+   | error '='  exp { EXP_BIN_ERR("assign"      , "expected an expression", @1, @$, $3, $$); }
    ;
 
 stmt.seq:
