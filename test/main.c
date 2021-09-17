@@ -27,7 +27,7 @@ int main() {
   T.add(val + 9, aux);
 
   printf("---\n");
-  tree_inorder(printf("%d(%lu) ", T.val ? deref(T.val, int) : 0, T.lvl), node);
+  tree_preorder(printf("%d(%lu) ", T.val ? deref(T.val, int) : 0, T.lvl), node);
   printf("<- inorder\n");
   printf("---\n");
   tree_postorder(printf("%d(%lu) ", T.val ? deref(T.val, int) : 0, T.lvl),
@@ -39,7 +39,7 @@ int main() {
   printf("---\n");
 
   T.del(aux);
-  tree_inorder(printf("%d(%lu) ", T.val ? deref(T.val, int) : 0, T.lvl), node);
+  tree_preorder(printf("%d(%lu) ", T.val ? deref(T.val, int) : 0, T.lvl), node);
   printf("<- inorder\n");
   T.del(node);
 
